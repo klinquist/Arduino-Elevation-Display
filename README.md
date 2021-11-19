@@ -22,4 +22,5 @@ Some soldering & coding may be required!
 
 * Connect GPS to +5v, GND, Digital pins 7 & 8
 * Connect display to +5V, GND, SCL, & SCA (A4 & A5 on the Metro Mini)
-* Upload sketch to Arduino
+* Upload the sketch included in this repository to the Arduino using the Arduino IDE & a USB cable!
+
