@@ -13,7 +13,7 @@ Parts required:
 
 * [Arduino Metro Mini](https://www.adafruit.com/product/2590)
 * [GPS](https://www.adafruit.com/product/4279)
-* [7 Segment LED](https://www.adafruit.com/product/1002)
+* [7 Segment Display with I2C backpack](https://www.adafruit.com/product/1002)
 * [12v to microUSB power supply](https://dongar.tech) - Dongar Tech makes many adapters that give you a plug-and-play USB port from your exisitng mirror wiring harness.
 
 
