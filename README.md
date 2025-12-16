@@ -2,6 +2,18 @@
 
 This will display your current elevation.  It even dims the display after sunset.
 
+Error codes:
+
+* `9001` - Display I2C not responding
+* `9002` - No GPS fix (after ~30s)
+* `9003` - GPS time/date not valid yet
+* `9004` - GPS location not valid yet
+
+Brightness behavior:
+
+* Uses civil twilight (sun ~6° below horizon) so it stays bright a bit after sunset and before sunrise.
+* `nighttimeBrightness` defaults to `1` (many HT16K33 displays treat `0` as “off”).
+
 For elevations above 9,999 feet, the first character will be displayed in hex. So 11,200 ft will be B200. 
 
 I haven't tested above 16,000 ft.
@@ -23,4 +35,3 @@ Some soldering & coding may be required!
 * Connect GPS to +5v, GND, Digital pins 7 & 8
 * Connect display to +5V, GND, SCL, & SCA (A4 & A5 on the Metro Mini)
 * Upload the sketch included in this repository to the Arduino using the Arduino IDE & a USB cable!
-
