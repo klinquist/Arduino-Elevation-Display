@@ -5,14 +5,24 @@ This will display your current elevation.  It even dims the display after sunset
 Error codes:
 
 * `9001` - Display I2C not responding
-* `9002` - No GPS fix (after ~30s)
-* `9003` - GPS time/date not valid yet
-* `9004` - GPS location not valid yet
+* `9002` - No GPS fix (after ~30s; shows `----` first)
+* `9003` - GPS time/date not valid yet (tracked internally)
+* `9004` - GPS location not valid yet (tracked internally)
 
 Brightness behavior:
 
 * Uses civil twilight (sun ~6° below horizon) so it stays bright a bit after sunset and before sunrise.
 * `nighttimeBrightness` defaults to `0` (typically 0..15, where 0 is dimmest).
+
+Boot / time behavior:
+
+* While waiting for a GPS fix, the display shows `----` for ~30s, then `9002` if no fix.
+* Once GPS time is valid, the display shows local time for ~10s, then switches to altitude.
+
+Timezone configuration:
+
+* Edit `LOCAL_STD_OFFSET_HOURS` and `LOCAL_OBSERVES_US_DST` in `GPS-Alt.ino` to match your timezone.
+* Common US standard offsets: Pacific `-8`, Mountain `-7` (Arizona is `-7` with DST off), Central `-6`, Eastern `-5`, Alaska `-9`, Hawaii `-10`.
 
 For elevations above 9,999 feet, the first character will be displayed in hex. So 11,200 ft will be B200. 
 

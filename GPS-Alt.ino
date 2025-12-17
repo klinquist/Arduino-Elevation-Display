@@ -41,6 +41,7 @@ uint8_t currentError = ERR_NONE;
 uint32_t bootMs = 0;
 bool displayOk = true;
 bool displayRecovered = false;
+uint32_t gpsTimeFirstValidMs = 0;
 
 
 // Connect the GPS Power pin to 5V
@@ -60,9 +61,122 @@ Adafruit_GPS GPS(&mySerial);
 static const uint8_t DISPLAY_ADDR = 0x70;
 static const uint32_t DISPLAY_UPDATE_MS = 2000;
 static const uint32_t GPS_FIX_GRACE_MS = 30000;
+static const uint32_t SHOW_TIME_MS = 10000;
 // 96° zenith ≈ civil twilight (sun 6° below horizon). This keeps the display
 // bright a bit after sunset and before sunrise, and avoids rapid toggling.
 static const float BRIGHTNESS_ZENITH_DEG = 96.0f;
+
+// Local time display configuration (used only for the 10s boot-time clock).
+// GPS time is UTC; sunrise/sunset logic also runs in UTC and does NOT need this.
+static const int8_t TZ_US_PACIFIC_STD_HOURS = -8;
+static const int8_t TZ_US_MOUNTAIN_STD_HOURS = -7;
+static const int8_t TZ_US_CENTRAL_STD_HOURS = -6;
+static const int8_t TZ_US_EASTERN_STD_HOURS = -5;
+static const int8_t TZ_US_ALASKA_STD_HOURS = -9;
+static const int8_t TZ_US_HAWAII_STD_HOURS = -10;
+
+// Pick one:
+static const int8_t LOCAL_STD_OFFSET_HOURS = TZ_US_PACIFIC_STD_HOURS;
+// US DST rules (2nd Sunday in March, 1st Sunday in Nov). Set false for AZ/HI, etc.
+static const bool LOCAL_OBSERVES_US_DST = true;
+
+// HT16K33 segment mapping (common Adafruit 7-seg backpack).
+// Bits: 0=A,1=B,2=C,3=D,4=E,5=F,6=G,7=DP.
+static const uint8_t SEG7_DIGITS[10] = {
+  0x3F, // 0
+  0x06, // 1
+  0x5B, // 2
+  0x4F, // 3
+  0x66, // 4
+  0x6D, // 5
+  0x7D, // 6
+  0x07, // 7
+  0x7F, // 8
+  0x6F, // 9
+};
+static const uint8_t SEG7_DASH = 0x40;
+
+static void writeHt16k33Digits(uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3) {
+  // Writes the 4 primary digits (2 bytes per digit starting at 0x00).
+  Wire.beginTransmission(DISPLAY_ADDR);
+  Wire.write((uint8_t)0x00);
+  Wire.write(d0); Wire.write((uint8_t)0x00);
+  Wire.write(d1); Wire.write((uint8_t)0x00);
+  Wire.write(d2); Wire.write((uint8_t)0x00);
+  Wire.write(d3); Wire.write((uint8_t)0x00);
+  (void)Wire.endTransmission();
+}
+
+static void displayDashes() {
+  writeHt16k33Digits(SEG7_DASH, SEG7_DASH, SEG7_DASH, SEG7_DASH);
+}
+
+// Zeller's congruence; returns 0=Sunday .. 6=Saturday.
+static uint8_t dayOfWeek(int year, int month, int day) {
+  if (month < 3) {
+    month += 12;
+    year -= 1;
+  }
+  int K = year % 100;
+  int J = year / 100;
+  int h = (day + (13 * (month + 1)) / 5 + K + (K / 4) + (J / 4) + (5 * J)) % 7; // 0=Sat
+  return (uint8_t)((h + 6) % 7);
+}
+
+static uint8_t nthSundayOfMonth(int year, int month, int n) {
+  uint8_t dow1 = dayOfWeek(year, month, 1); // 0=Sun
+  uint8_t firstSunday = 1 + (uint8_t)((7 - dow1) % 7);
+  return (uint8_t)(firstSunday + (uint8_t)(7 * (n - 1)));
+}
+
+static time_t makeUtcTime(int year, int month, int day, int hour, int minute, int second) {
+  tmElements_t t;
+  t.Second = (uint8_t)second;
+  t.Minute = (uint8_t)minute;
+  t.Hour = (uint8_t)hour;
+  t.Day = (uint8_t)day;
+  t.Month = (uint8_t)month;
+  t.Year = CalendarYrToTm(year);
+  return makeTime(t);
+}
+
+static bool isUsDst(time_t utc, int8_t standardOffsetHours) {
+  tmElements_t teUtc;
+  breakTime(utc, teUtc);
+  int year = 1970 + teUtc.Year;
+
+  // US DST: starts 2nd Sunday in March at 02:00 local STANDARD time,
+  // ends 1st Sunday in November at 02:00 local DAYLIGHT time.
+  uint8_t dstStartDay = nthSundayOfMonth(year, 3, 2);
+  uint8_t dstEndDay = nthSundayOfMonth(year, 11, 1);
+
+  // UTC = local - offsetHours. (offsetHours is negative in the Americas.)
+  int startUtcHour = 2 - (int)standardOffsetHours;
+  int endUtcHour = 2 - (int)(standardOffsetHours + 1); // DST offset
+  time_t dstStartUtc = makeUtcTime(year, 3, dstStartDay, startUtcHour, 0, 0);
+  time_t dstEndUtc = makeUtcTime(year, 11, dstEndDay, endUtcHour, 0, 0);
+  return (utc >= dstStartUtc) && (utc < dstEndUtc);
+}
+
+static bool displayLocalTimeIfPossible(time_t utc) {
+  if (utc == 0) return false;
+  int offsetHours = (int)LOCAL_STD_OFFSET_HOURS;
+  if (LOCAL_OBSERVES_US_DST && isUsDst(utc, LOCAL_STD_OFFSET_HOURS)) offsetHours += 1;
+
+  int32_t localSeconds = (int32_t)utc + (int32_t)offsetHours * (int32_t)SECS_PER_HOUR;
+  time_t local = (time_t)localSeconds;
+
+  tmElements_t teLocal;
+  breakTime(local, teLocal);
+  uint8_t hh = teLocal.Hour;
+  uint8_t mm = teLocal.Minute;
+  uint8_t hTens = (uint8_t)(hh / 10);
+  uint8_t hOnes = (uint8_t)(hh % 10);
+  uint8_t mTens = (uint8_t)(mm / 10);
+  uint8_t mOnes = (uint8_t)(mm % 10);
+  writeHt16k33Digits(SEG7_DIGITS[hTens], SEG7_DIGITS[hOnes], SEG7_DIGITS[mTens], SEG7_DIGITS[mOnes]);
+  return true;
+}
 
 static float nmeaToDecimalDegrees(float ddmm_mmmm) {
   double degrees = floor((double)ddmm_mmmm / 100.0);
@@ -229,6 +343,7 @@ void loop()                     // run over and over again
     float latDeg = 0.0f, lonDeg = 0.0f;
     bool hasTime = getGpsUnixTimeUtc(ts);
     bool hasLoc = getGpsLatLonDeg(latDeg, lonDeg);
+    if (hasTime && gpsTimeFirstValidMs == 0) gpsTimeFirstValidMs = millis();
     if (hasTime && hasLoc) {
       unixTime = ts;
       SunriseSunsetUtc ss = calcSunriseSunsetUtc(unixTime, latDeg, lonDeg, BRIGHTNESS_ZENITH_DEG);
@@ -292,6 +407,11 @@ void loop()                     // run over and over again
       return;
     }
 
+    // Show local time for a short window after GPS time becomes valid.
+    if (displayOk && gpsTimeFirstValidMs != 0 && (millis() - gpsTimeFirstValidMs) < SHOW_TIME_MS) {
+      if (displayLocalTimeIfPossible(ts)) return;
+    }
+
     if (GPS.fix) {
       // Meters to feet...
       double doubFt = GPS.altitude * 3.28084;
@@ -305,17 +425,12 @@ void loop()                     // run over and over again
       if (displayOk) seg.displayInt((int)doubFt);
       Serial.print("Satellites: "); Serial.println((int)GPS.satellites);
     } else {
-      // Give the GPS a bit of time after boot before showing an error.
-      if (displayOk) {
-        if (millis() - bootMs <= GPS_FIX_GRACE_MS) {
-          seg.displayInt(0);
-        } else if (currentError == ERR_NO_GPS_TIME) {
-          displayError(ERR_NO_GPS_TIME);
-        } else if (currentError == ERR_NO_GPS_LOCATION) {
-          displayError(ERR_NO_GPS_LOCATION);
-        } else {
-          displayError(ERR_NO_GPS_FIX);
-        }
+      // While waiting for a fix, avoid showing "9003" on boot; show dashes instead.
+      if (!displayOk) return;
+      if (millis() - bootMs <= GPS_FIX_GRACE_MS) {
+        displayDashes();
+      } else {
+        displayError(ERR_NO_GPS_FIX);
       }
     }
   }
