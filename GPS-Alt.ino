@@ -22,9 +22,9 @@ time_t unixTime; // a time stamp
 
 
 int daytimeBrightness = 15;
-// Note: brightness 0 is effectively "off" on many HT16K33 displays.
-// Use 1+ to avoid an apparently blank display.
-int nighttimeBrightness = 1;
+// Brightness range is typically 0..15 (0 = dimmest).
+// If 0 is too dim on your hardware, bump this up to 1+.
+int nighttimeBrightness = 0;
 int currentBrightness = -1;
 
 // Error codes are displayed as 9xxx to avoid confusion with altitude.
@@ -127,7 +127,7 @@ static bool ensureDisplayReady() {
   Wire.setClock(100000);
   seg.begin();
   seg.displayOn();
-  if (currentBrightness < 0) currentBrightness = daytimeBrightness;
+  if (currentBrightness < 0) currentBrightness = nighttimeBrightness;
   seg.brightness(currentBrightness);
 
   okNow = isDisplayPresent();
@@ -143,7 +143,7 @@ static void displayError(uint8_t err) {
 
 static void ensureDisplayOn() {
   seg.displayOn();
-  if (currentBrightness < 0) currentBrightness = daytimeBrightness;
+  if (currentBrightness < 0) currentBrightness = nighttimeBrightness;
   seg.brightness(currentBrightness);
 }
 
@@ -162,7 +162,8 @@ void setup()
   seg.displayClear();  
 
   // Show a non-blank startup state.
-  currentBrightness = daytimeBrightness;
+  // Fail-safe dim until we have valid GPS time+location to decide day/night.
+  currentBrightness = nighttimeBrightness;
   seg.brightness(currentBrightness);
   seg.displayInt(0);
   delay(500);
@@ -250,6 +251,27 @@ void loop()                     // run over and over again
         }
 
         int desired = isDay ? daytimeBrightness : nighttimeBrightness;
+        Serial.print("UTC ");
+        if (GPS.hour < 10) Serial.print('0');
+        Serial.print((int)GPS.hour);
+        Serial.print(':');
+        if (GPS.minute < 10) Serial.print('0');
+        Serial.print((int)GPS.minute);
+        Serial.print(" sunrise ");
+        Serial.print((int)(ss.sunriseMin / 60));
+        Serial.print(':');
+        if ((ss.sunriseMin % 60) < 10) Serial.print('0');
+        Serial.print((int)(ss.sunriseMin % 60));
+        Serial.print(" sunset ");
+        Serial.print((int)(ss.sunsetMin / 60));
+        Serial.print(':');
+        if ((ss.sunsetMin % 60) < 10) Serial.print('0');
+        Serial.print((int)(ss.sunsetMin % 60));
+        Serial.print(" -> ");
+        Serial.print(isDay ? "day" : "night");
+        Serial.print(" brightness ");
+        Serial.println(desired);
+
         if (desired != currentBrightness) {
           Serial.print("Setting brightness to ");
           Serial.println(isDay ? "day" : "night");

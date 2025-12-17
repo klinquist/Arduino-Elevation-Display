@@ -12,7 +12,7 @@ Error codes:
 Brightness behavior:
 
 * Uses civil twilight (sun ~6° below horizon) so it stays bright a bit after sunset and before sunrise.
-* `nighttimeBrightness` defaults to `1` (many HT16K33 displays treat `0` as “off”).
+* `nighttimeBrightness` defaults to `0` (typically 0..15, where 0 is dimmest).
 
 For elevations above 9,999 feet, the first character will be displayed in hex. So 11,200 ft will be B200. 
 
