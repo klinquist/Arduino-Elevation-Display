@@ -95,24 +95,27 @@ static const uint8_t SEG7_DIGITS[10] = {
   0x6F, // 9
 };
 static const uint8_t SEG7_DASH = 0x40;
+// 7-seg approximations for letters.
+static const uint8_t SEG7_GLYPH_G = 0x7D; // looks like 6
+static const uint8_t SEG7_GLYPH_P = 0x73;
+static const uint8_t SEG7_GLYPH_S = 0x6D; // looks like 5
 
 static void writeHt16k33Digits(uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3) {
-  // Writes the 4 primary digits (2 bytes per digit starting at 0x00).
-  Wire.beginTransmission(DISPLAY_ADDR);
-  Wire.write((uint8_t)0x00);
-  Wire.write(d0); Wire.write((uint8_t)0x00);
-  Wire.write(d1); Wire.write((uint8_t)0x00);
-  Wire.write(d2); Wire.write((uint8_t)0x00);
-  Wire.write(d3); Wire.write((uint8_t)0x00);
-  (void)Wire.endTransmission();
+  // Use the library's digit mapping so all four positions are addressed.
+  uint8_t raw[4] = {d0, d1, d2, d3};
+  seg.displayRaw(raw, false);
 }
 
 static void displayDashes() {
   writeHt16k33Digits(SEG7_DASH, SEG7_DASH, SEG7_DASH, SEG7_DASH);
 }
 
+static void displayNoGpsFix() {
+  writeHt16k33Digits(SEG7_DASH, SEG7_GLYPH_G, SEG7_GLYPH_P, SEG7_GLYPH_S);
+}
+
 // Zeller's congruence; returns 0=Sunday .. 6=Saturday.
-static uint8_t dayOfWeek(int year, int month, int day) {
+static uint8_t calcDayOfWeek(int year, int month, int day) {
   if (month < 3) {
     month += 12;
     year -= 1;
@@ -124,7 +127,7 @@ static uint8_t dayOfWeek(int year, int month, int day) {
 }
 
 static uint8_t nthSundayOfMonth(int year, int month, int n) {
-  uint8_t dow1 = dayOfWeek(year, month, 1); // 0=Sun
+  uint8_t dow1 = calcDayOfWeek(year, month, 1); // 0=Sun
   uint8_t firstSunday = 1 + (uint8_t)((7 - dow1) % 7);
   return (uint8_t)(firstSunday + (uint8_t)(7 * (n - 1)));
 }
@@ -279,7 +282,7 @@ void setup()
   // Fail-safe dim until we have valid GPS time+location to decide day/night.
   currentBrightness = nighttimeBrightness;
   seg.brightness(currentBrightness);
-  seg.displayInt(0);
+  displayDashes();
   delay(500);
 
 
@@ -430,7 +433,7 @@ void loop()                     // run over and over again
       if (millis() - bootMs <= GPS_FIX_GRACE_MS) {
         displayDashes();
       } else {
-        displayError(ERR_NO_GPS_FIX);
+        displayNoGpsFix();
       }
     }
   }

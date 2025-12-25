@@ -5,7 +5,7 @@ This will display your current elevation.  It even dims the display after sunset
 Error codes:
 
 * `9001` - Display I2C not responding
-* `9002` - No GPS fix (after ~30s; shows `----` first)
+* No GPS fix (after ~30s; shows `----` first, then `-GPS`)
 * `9003` - GPS time/date not valid yet (tracked internally)
 * `9004` - GPS location not valid yet (tracked internally)
 
@@ -16,7 +16,7 @@ Brightness behavior:
 
 Boot / time behavior:
 
-* While waiting for a GPS fix, the display shows `----` for ~30s, then `9002` if no fix.
+* While waiting for a GPS fix, the display shows `----` for ~30s, then `-GPS` if no fix.
 * Once GPS time is valid, the display shows local time for ~10s, then switches to altitude.
 
 Timezone configuration:
